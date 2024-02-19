@@ -88,7 +88,10 @@ SatPosInfo, SatClkInfo, SatApoInfo, SatComPos_1, Sod_1):
     # Initialize some values
     ResSum = 0.0
     ResN = 0
-
+    ####
+    x1_ClkBias = 0
+    x2_ClkBias = 30
+    ####
     # Get SoD
     Sod = int(float(ObsInfo[0][ObsIdx["SOD"]]))
 
@@ -149,7 +152,10 @@ SatPosInfo, SatClkInfo, SatApoInfo, SatComPos_1, Sod_1):
             "TropoMpp": 0.0,        # Tropospheric mapping function
 
         } # End of SatCorrInfo
-
+        '''
+        if SatLabel == 'G27':
+            print("debug")
+        '''
         # Prepare outputs
         # Get SoD
         SatCorrInfo["Sod"] = Sod
@@ -161,5 +167,21 @@ SatPosInfo, SatClkInfo, SatApoInfo, SatComPos_1, Sod_1):
         SatCorrInfo["Azimuth"] = SatPrepro["Azimuth"]
 
 
+        #CorrInfo[SatLabel]["SOD"] = SatCorrInfo[SatLabel]["Sod"]
+        
+        # Only for those Satellites with Status OK
+        if SatPrepro["Status"] == 1:
+            None
+        else:
+            SatCorrInfo["Flag"] == 0
+
+        
+        # Compute Satellite Clock Bias (linear interpolation between closer inputs)
+        #-----------------------------------------------------------------------
+        #if(SatCorrInfo["Sod"] >= index_ClkBias)
+        #satClkBias = SatClkInfo[SatClkIdx["CLK-BIAS"]]
+        
+
+   
 
     return CorrInfo
