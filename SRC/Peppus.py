@@ -223,7 +223,7 @@ for Rcvr in RcvrInfo.keys():
                     # Get SoD
                     Sod = int(float(ObsInfo[0][ObsIdx["SOD"]]))
 
-                    # The rest of te analyses are executed every configured sampling rate
+                    # The rest of the analyses are executed every configured sampling rate
                     if(Sod % Conf["SAMPLING_RATE"] == 0):
                         # Correct measurements and estimate the variances with SBAS information
                         # ----------------------------------------------------------

@@ -88,10 +88,7 @@ SatPosInfo, SatClkInfo, SatApoInfo, SatComPos_1, Sod_1):
     # Initialize some values
     ResSum = 0.0
     ResN = 0
-    ####
-    x1_ClkBias = 0
-    x2_ClkBias = 30
-    ####
+
     # Get SoD
     Sod = int(float(ObsInfo[0][ObsIdx["SOD"]]))
 
@@ -152,10 +149,7 @@ SatPosInfo, SatClkInfo, SatApoInfo, SatComPos_1, Sod_1):
             "TropoMpp": 0.0,        # Tropospheric mapping function
 
         } # End of SatCorrInfo
-        '''
-        if SatLabel == 'G27':
-            print("debug")
-        '''
+
         # Prepare outputs
         # Get SoD
         SatCorrInfo["Sod"] = Sod
@@ -167,21 +161,90 @@ SatPosInfo, SatClkInfo, SatApoInfo, SatComPos_1, Sod_1):
         SatCorrInfo["Azimuth"] = SatPrepro["Azimuth"]
 
 
-        #CorrInfo[SatLabel]["SOD"] = SatCorrInfo[SatLabel]["Sod"]
-        
         # Only for those Satellites with Status OK
         if SatPrepro["Status"] == 1:
-            None
+            # Get Components of SatLabel to access InfoFiles
+            Constel = SatLabel[0]
+            Prn = int(SatLabel[1:])
+
+            # Compute Satellite Clock Bias (linear interpolation between closer inputs) RELOJES GAP !!!
+            #-----------------------------------------------------------------------
+            clkBias = SatClkInfo[Constel][Prn][Sod]
+
+            #SatClkBias = computeSatClkBias(Sod, SatClkInfo, SatLabel)
+            #SatClkBias2 = lagrangeInterpolation(Sod, SatClkInfo, SatLabel, 2)
+            SatClkPrn = SatClkInfo[Constel][Prn]
+            SodList = np.array(list(SatClkPrn.keys()))
+            SodData = np.array(list(SatClkPrn.values()))
+
+            #if Sod == 300:
+                #print("debug")
+
+            point = bisect_right(SodList, Sod)
+            
+            # Compute Delta t
+            #-----------------------------------------------------------------------
+            DeltaT = SatPrepro["C1"] / Const.SPEED_OF_LIGHT
+
+            # Compute Transmission Time
+            TransmissionTime = Sod - DeltaT - clkBias
+
+            # Compute Satellite CoM Position at Transmission Time
+            # 10-point Lagrange interpolation between closer inputs (SP3 positions)
+            #-----------------------------------------------------------------------
+           
+             
+
         else:
             SatCorrInfo["Flag"] == 0
 
-        
-        # Compute Satellite Clock Bias (linear interpolation between closer inputs)
-        #-----------------------------------------------------------------------
-        #if(SatCorrInfo["Sod"] >= index_ClkBias)
-        #satClkBias = SatClkInfo[SatClkIdx["CLK-BIAS"]]
-        
-
+        # prepare output
+        CorrInfo[SatLabel] = SatCorrInfo
    
-
     return CorrInfo
+
+# Linear interpolation to compute Satellite Clock Bias
+def computeSatClkBias(Sod, SatClkInfo, SatLabel):
+    t1 = 0
+    t2 = 30
+
+    if not (t1 <= Sod and t2 >= Sod):
+        t1 = t1 + 30
+        t2 = t2 + 30
+
+    SatClkBias = SatClkInfo[SatLabel[0]][int(SatLabel[1:])][t1] + \
+        (Sod-t1) * (SatClkInfo[SatLabel[0]][int(SatLabel[1:])][t2] - \
+            SatClkInfo[SatLabel[0]][int(SatLabel[1:])][t1]) / (t2-t1)
+
+    return SatClkBias
+
+# Lagrange Interpolation
+def lagrangeInterpolation(x, info, SatLabel, n):
+
+    # Ordena la lista de acuerdo a la distancia entre cada punto y x
+    lista_ordenada = sorted(info[SatLabel[0]][int(SatLabel[1:])].keys(), key=lambda punto: pointDistance(punto, (x, 0)))
+
+    # Extrae las posiciones y valores ordenados
+    posiciones_ordenadas = [punto[0] for punto in lista_ordenada]
+    valores_ordenados = [punto[1] for punto in lista_ordenada]
+
+     # Selecciona los primeros n elementos de las listas ordenadas
+    x_interpolate_points = posiciones_ordenadas[:n]
+    y_interpolate_points = valores_ordenados[:n]
+
+    # Perform Lagrange Interpolation
+    result = 0
+    for i in range(len(x_interpolate_points)):
+        term = y_interpolate_points[i]
+        for j in range(len(x_interpolate_points)):
+            if j != i:
+                term = term * (x - x_interpolate_points[j]) / (x_interpolate_points[i] - x_interpolate_points[j])
+        result += term
+
+    return result
+
+def pointDistance (point1, point2):
+    return abs(point1 - point2)
+
+
+
