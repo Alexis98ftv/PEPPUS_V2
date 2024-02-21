@@ -28,6 +28,7 @@ from collections import OrderedDict
 from COMMON import GnssConstants as Const
 from COMMON.Misc import findSun, crossProd
 # from COMMON.Tropo import computeTropoMpp, computeZtd, computeSigmaTropo
+from COMMON.Tropo import computeGeoidHeight
 from InputOutput import RcvrIdx, ObsIdx, SatPosIdx, SatClkIdx, SatApoIdx
 import numpy as np
 from bisect import bisect_left, bisect_right
@@ -163,25 +164,14 @@ SatPosInfo, SatClkInfo, SatApoInfo, SatComPos_1, Sod_1):
 
         # Only for those Satellites with Status OK
         if SatPrepro["Status"] == 1:
-            # Get Components of SatLabel to access InfoFiles
-            Constel = SatLabel[0]
-            Prn = int(SatLabel[1:])
-
-            # Compute Satellite Clock Bias (linear interpolation between closer inputs) RELOJES GAP !!!
+            '''
+            if (Sod==3000):
+                print("debug")
+            '''
+            # Compute Satellite Clock Bias (linear interpolation between closer inputs) ######RELOJES GAP !!!
             #-----------------------------------------------------------------------
-            clkBias = SatClkInfo[Constel][Prn][Sod]
+            clkBias = computeSatClkBias(Sod, SatClkInfo, SatLabel)
 
-            #SatClkBias = computeSatClkBias(Sod, SatClkInfo, SatLabel)
-            #SatClkBias2 = lagrangeInterpolation(Sod, SatClkInfo, SatLabel, 2)
-            SatClkPrn = SatClkInfo[Constel][Prn]
-            SodList = np.array(list(SatClkPrn.keys()))
-            SodData = np.array(list(SatClkPrn.values()))
-
-            #if Sod == 300:
-                #print("debug")
-
-            point = bisect_right(SodList, Sod)
-            
             # Compute Delta t
             #-----------------------------------------------------------------------
             DeltaT = SatPrepro["C1"] / Const.SPEED_OF_LIGHT
@@ -192,8 +182,60 @@ SatPosInfo, SatClkInfo, SatApoInfo, SatComPos_1, Sod_1):
             # Compute Satellite CoM Position at Transmission Time
             # 10-point Lagrange interpolation between closer inputs (SP3 positions)
             #-----------------------------------------------------------------------
-           
-             
+            SatComPos = computeSatComPos(TransmissionTime, SatPosInfo, SatLabel)
+            
+            # Compute Flight Time
+            #-----------------------------------------------------------------------
+            FlightTime = computeFlightTime(SatComPos, RcvrRefPosXyz)
+
+            # Apply Sagnac correction
+            #-----------------------------------------------------------------------
+            #SatComPos = applySagnac(SatComPos, FlightTime)
+            
+            theta = Const.OMEGA_EARTH*FlightTime
+
+            # Compute APO in ECEF from ANTEX APOs in
+            # satellite-body reference frame
+            #-----------------------------------------------------------------------
+            #Apo = computeSatApo(SatComPos, RcvrPos, SunPos, SatComPos, SatApoInfo)
+
+            #
+
+            # Apply APOs to the Satellite Position
+            #SatCopPos = SatComPos + Apo
+
+            #
+
+            # Compute Dtr (Relativistic correction)
+            #-----------------------------------------------------------------------
+            #Dtr = computeDtr(SatComPos_1, SatComPos, Sod, Sod_1)
+
+            #
+
+            # Apply Dtr to Clock Bias
+            #SatClkBias = SatClkBias + Dtr
+
+            #
+
+            # Compute the STD: Slant Tropo Delay and associated SigmaTROPO
+            # Refer to MOPS guidelines in Appendix A section A.4.2.4
+            #-----------------------------------------------------------------------
+            # Compute Tropospheric Mapping Function
+            TropoMpp = computeTropoMpp(SatCorrInfo["Elevation"])
+
+            # Compute the Slant Tropospheric Delay Error Sigma (Tropospheric Vertical Error = 0.12 meters)
+            SigmaTROPO = 0.12 * TropoMpp
+
+            # Compute the Slant Tropospheric Delay
+            STD = computeSlantTropoDelay(TropoMpp, Rcvr, Doy)
+
+            # Compute User Airborne Sigma. Ref: MOPS-DO-229D Section J.2.4
+            #-----------------------------------------------------------------------
+            # Consider Maximum Signal Level when satellite elevation is greater
+            # than Conf.ELEV_NOISE_TH=20, and Minimum Signal Level otherwise
+            # Apply Conf.SIGMA_AIR_DF factor to both the MP and Noise components
+
+
 
         else:
             SatCorrInfo["Flag"] == 0
@@ -203,48 +245,247 @@ SatPosInfo, SatClkInfo, SatApoInfo, SatComPos_1, Sod_1):
    
     return CorrInfo
 
-# Linear interpolation to compute Satellite Clock Bias
-def computeSatClkBias(Sod, SatClkInfo, SatLabel):
-    t1 = 0
-    t2 = 30
 
-    if not (t1 <= Sod and t2 >= Sod):
-        t1 = t1 + 30
-        t2 = t2 + 30
 
-    SatClkBias = SatClkInfo[SatLabel[0]][int(SatLabel[1:])][t1] + \
-        (Sod-t1) * (SatClkInfo[SatLabel[0]][int(SatLabel[1:])][t2] - \
-            SatClkInfo[SatLabel[0]][int(SatLabel[1:])][t1]) / (t2-t1)
-
-    return SatClkBias
+#######################################################
+# EXTERNAL FUNCTIONS
+#######################################################
 
 # Lagrange Interpolation
-def lagrangeInterpolation(x, info, SatLabel, n):
-
-    # Ordena la lista de acuerdo a la distancia entre cada punto y x
-    lista_ordenada = sorted(info[SatLabel[0]][int(SatLabel[1:])].keys(), key=lambda punto: pointDistance(punto, (x, 0)))
-
-    # Extrae las posiciones y valores ordenados
-    posiciones_ordenadas = [punto[0] for punto in lista_ordenada]
-    valores_ordenados = [punto[1] for punto in lista_ordenada]
-
-     # Selecciona los primeros n elementos de las listas ordenadas
-    x_interpolate_points = posiciones_ordenadas[:n]
-    y_interpolate_points = valores_ordenados[:n]
-
+def lagrangeInterpolation(x, y, t, n):
     # Perform Lagrange Interpolation
-    result = 0
-    for i in range(len(x_interpolate_points)):
-        term = y_interpolate_points[i]
-        for j in range(len(x_interpolate_points)):
+    result = 0.0
+    for i in range(n):
+        term = y[i]
+        for j in range(n):
             if j != i:
-                term = term * (x - x_interpolate_points[j]) / (x_interpolate_points[i] - x_interpolate_points[j])
+                term = term * (t - x[j]) / (x[i] - x[j])
         result += term
-
     return result
 
-def pointDistance (point1, point2):
-    return abs(point1 - point2)
+# Compute Satellite Clock Bias 
+def computeSatClkBias(Sod, SatClkInfo, SatLabel):
+    # Get Components of SatLabel to access InfoFiles
+    Constel = SatLabel[0]
+    Prn = int(SatLabel[1:])
+    SatClkPrn = SatClkInfo[Constel][Prn]
+    SodList = np.array(list(SatClkPrn.keys()))
+    # No need of interpolation if it's in the infoFile
+    if Sod in SodList:
+        clkBias = SatClkPrn[Sod]
+    else:
+        #SodData = np.array(list(SatClkPrn.values()))
+        n = 2
+        # Obtain the Sod of near points
+        x1 = SodList[bisect_left(SodList, Sod)]
+        x2 = SodList[bisect_right(SodList, Sod)]
+        x = [x1, x2]    
+        # Obtain the ClkBiases of near points to interpolate
+        y1 = SatClkPrn[x1]
+        y2 = SatClkPrn[x2]
+        y = [y1, y2]
+
+        # Lagrange Interpolation (n=2: Linear Interpolation)
+        clkBias = lagrangeInterpolation(x, y, Sod, n)
+
+    return clkBias
+
+# Compute Satellite CoM Position at Transmission Time with Lagrange Interpolation
+def computeSatComPos(TransmissionTime, SatPosInfo, SatLabel):
+    # Get Components of SatLabel to access InfoFiles
+    Constel = SatLabel[0]
+    Prn = int(SatLabel[1:])
+    SatPosPrn = SatPosInfo[Constel][Prn]
+
+    SodList = np.array(list(SatPosPrn.keys()))
+    tt = TransmissionTime
+    # No need of interpolation if it's in the infoFile
+    if tt in SodList:
+        SatComPos = SatPosPrn[tt]
+        
+    else:
+        #SodData = np.array(list(SatPosPrn.values())) 
+        n = 10
+        sod_inter = [0.0] * n
+
+        # Fill the list of points to interpolate
+        if tt < 3600:
+            for i in range(n):
+                sod_inter[i] = SodList[i]
+        elif tt > 82800:
+            for i in range(n):
+                sod_inter[-i-1] = SodList[-i-1]
+        else:
+            # Obtain positions of near points 
+            pos4 = bisect_left(SodList, tt)
+            pos5 = bisect_right(SodList, tt)
+            # Add to the array the nearest 10 points
+            for i in range((n/2)-1):
+                sod_inter[(n/2)+i] = SodList[pos5 + i]
+                sod_inter[((n/2)-1)-i] = SodList[pos4 - i]
+
+        # Values to interpolate
+        xCM_inter = [0.0] * n
+        yCM_inter = [0.0] * n
+        zCM_inter = [0.0] * n
+
+        # Obtain values for each position of points
+        for i in range(n):
+            xCM_inter[i] = SatPosPrn[sod_inter[i]][0]
+            yCM_inter[i] = SatPosPrn[sod_inter[i]][1]
+            zCM_inter[i] = SatPosPrn[sod_inter[i]][2]
+        
+        # Interpolate for each coordinate (X,Y,Z)
+        xCM_interpolated = lagrangeInterpolation(sod_inter, xCM_inter, tt, n)
+        yCM_interpolated = lagrangeInterpolation(sod_inter, yCM_inter, tt, n)
+        zCM_interpolated = lagrangeInterpolation(sod_inter, zCM_inter, tt, n)
+
+        SatComPos = [xCM_interpolated, yCM_interpolated, zCM_interpolated]
+
+    return SatComPos
+
+# Compute Flight Time
+def computeFlightTime(SatComPos, RcvrRefPosXyz):
+
+    # Calculate distance
+    distance = np.sqrt((SatComPos[0] - RcvrRefPosXyz[0])**2 + \
+                       (SatComPos[1] - RcvrRefPosXyz[1])**2 + \
+                       (SatComPos[2] - RcvrRefPosXyz[2])**2)
+   
+    FlightTime = distance / Const.SPEED_OF_LIGHT
+
+    return FlightTime
+
+# Compute Tropospheric Mapping Function
+def computeTropoMpp(elev_deg):
+    elev_rad = elev_deg * (np.pi/180)
+    mpp = 1.001 / np.sqrt(0.002001 + np.sin(elev_rad)**2)
+
+    return mpp
+
+# Compute the Slant Tropospheric Delay: STD = (d_hyd + d_wet) * TropoMpp
+def computeSlantTropoDelay(TropoMpp, Rcvr, Doy):      
+    # METEOROLOGICAL PARAMETERS FOR TROPOSPHERIC DELAYS
+    # Dependency on Latitude(º) [15 or less, 30, 45, 60, 75 or greater]
+    #-----------------------------------------------------------------------
+    # Average
+    #---------------------
+    # Pressure [mbar]
+    P_0 = [1013.25, 1017.25, 1011.75, 1011.75, 1013.00]
+    # Temperature [K]
+    T_0 = [299.65, 294.15, 283.15, 272.15, 263.65]
+    # Water vapor pressure [mbar]
+    e_0 = [26.31, 21.79, 11.66, 6.78, 4.11]
+    # Temperrature lapse rate [K/m]
+    Beta_0 = [6.30e-3, 6.05e-3, 5.58e-3, 5.39e-3, 4.53e-3] 
+    # Water vapor "lapse rate" [dimensionless]
+    Lambda_0 = [2.77, 3.15, 2.57, 1.81, 1.55]
+    
+    # Seasonal Variation
+    #---------------------
+    delta_P_0 = [0.00, -3.75, -2.25, -1.75, -0.50]
+    delta_T_0 = [0.00, 7.00, 11.00, 15.00, 14.50]
+    delta_e_0 = [0.00, 8.85, 7.24, 5.36, 3.39]
+    delta_B_0 = [0.00e-3, 0.25e-3, 0.32e-3, 0.81e-3, 0.62e-3]
+    delta_L_0 = [0.00, 0.33, 0.46, 0.74, 0.30]
+
+    # Latitudes
+    #---------------------
+    latitudes = [15.00, 30.00, 45.00, 60.00, 75.00]
+
+    # Latitude and longitud of Receiver
+    LatRx = Rcvr[RcvrIdx["LAT"]]
+    LonRx = Rcvr[RcvrIdx["LON"]]
+
+    # No need to interpolation if lat < 15º
+    if LatRx <= latitudes[0]:
+        P_interp = P_0[0]
+        T_interp = T_0[0]
+        e_interp = e_0[0]
+        B_interp = Beta_0[0]
+        L_interp = Lambda_0[0]
+
+        delta_P_interp = delta_P_0[0]
+        delta_T_interp = delta_T_0[0]
+        delta_e_interp = delta_e_0[0]
+        delta_B_interp = delta_B_0[0]
+        delta_L_interp = delta_L_0[0]
+
+    # No need to interpolation if lat > 75º
+    elif LatRx >= latitudes[4]:
+        P_interp = P_0[4]
+        T_interp = T_0[4]
+        e_interp = e_0[4]
+        B_interp = Beta_0[4]
+        L_interp = Lambda_0[4]
+
+        delta_P_interp = delta_P_0[4]
+        delta_T_interp = delta_T_0[4]
+        delta_e_interp = delta_e_0[4]
+        delta_B_interp = delta_B_0[4]
+        delta_L_interp = delta_L_0[4]
+
+    # Linear interpolation between values for the two closest latitudes
+    else:
+        P_interp = lagrangeInterpolation(latitudes, P_0, LatRx, 2)
+        T_interp = lagrangeInterpolation(latitudes, T_0, LatRx, 2)
+        e_interp = lagrangeInterpolation(latitudes, e_0, LatRx, 2)
+        B_interp = lagrangeInterpolation(latitudes, Beta_0, LatRx, 2)
+        L_interp = lagrangeInterpolation(latitudes, Lambda_0, LatRx, 2)
+
+        delta_P_interp = lagrangeInterpolation(latitudes, delta_P_0, LatRx, 2)
+        delta_T_interp = lagrangeInterpolation(latitudes, delta_T_0, LatRx, 2)
+        delta_e_interp = lagrangeInterpolation(latitudes, delta_e_0, LatRx, 2)
+        delta_B_interp = lagrangeInterpolation(latitudes, delta_B_0, LatRx, 2)
+        delta_L_interp = lagrangeInterpolation(latitudes, delta_L_0, LatRx, 2)
+
+    # Value of the 5 parameters  depended on rx Latitude and day of year (Doy)
+    # Const 
+    #---------------------
+    Dmin = 28 # Northern latitudes (Dmin = 211 for Southern latitudes)
+    # Compute 5 Meteorological parameters
+    #---------------------
+    P = P_interp - delta_P_interp*np.cos((2*np.pi*(Doy-Dmin))/365.25)
+    T = T_interp - delta_T_interp*np.cos((2*np.pi*(Doy-Dmin))/365.25)
+    e = e_interp - delta_e_interp*np.cos((2*np.pi*(Doy-Dmin))/365.25)
+    B = B_interp - delta_B_interp*np.cos((2*np.pi*(Doy-Dmin))/365.25)
+    L = L_interp - delta_L_interp*np.cos((2*np.pi*(Doy-Dmin))/365.25)
+
+    # Zero-altitude zenith delays terms [z_hyd, z_wet (m)]
+    #--------------------------------------------------------
+    # Consts:
+    # [K/mbar]
+    k1 = 77.604
+    # [K^2/mbar]
+    k2 = 382000
+    # [J/(kg*K)]
+    Rd = 287.054
+    # [m/s^2]
+    gm = 9.784
+
+    z_hyd = (10e-6*k1*Rd*P) / gm
+    z_wet = ((10e-6*k2*Rd) / (gm*(L+1)-B*Rd))*(e/T)
+
+    # [d_hyd and d_wet] estimated range delays for a satellite 
+    # at 90º elevation angle (gases and water vapor)
+    #--------------------------------------------------------
+    # Consts:
+    # [m/s^2]
+    g = 9.80665
+
+    geoidH = computeGeoidHeight(LonRx, LatRx)
+    # Receiver's height (H) above mean-sea-level
+    H = geoidH - Rcvr[RcvrIdx["ALT"]]
+
+    d_hyd = z_hyd*((1-((B*H)/T))**(g/(Rd*B)))
+    d_wet = z_wet*((1-((B*H)/T))**(((g*(L+1))/(Rd*B))-1))
+
+    # Tropospheric delay correction TC for satellite
+    #--------------------------------------------------------
+    TC = -(d_hyd + d_wet) * TropoMpp
+
+    # return STD
+    return TC
 
 
 
