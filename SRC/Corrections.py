@@ -161,14 +161,12 @@ SatPosInfo, SatClkInfo, SatApoInfo, SatComPos_1, Sod_1):
         # Get Azimuth
         SatCorrInfo["Azimuth"] = SatPrepro["Azimuth"]
 
+        #print(SatPrepro["Status"])
 
         # Only for those Satellites with Status OK
         if SatPrepro["Status"] == 1:
-            '''
-            if (Sod==3000):
-                print("debug")
-            '''
-            # Compute Satellite Clock Bias (linear interpolation between closer inputs) ######RELOJES GAP !!!
+
+            # Compute Satellite Clock Bias (linear interpolation between closer inputs) ######RELOJES GAP !!!??
             #-----------------------------------------------------------------------
             clkBias = computeSatClkBias(Sod, SatClkInfo, SatLabel)
 
@@ -190,21 +188,15 @@ SatPosInfo, SatClkInfo, SatApoInfo, SatComPos_1, Sod_1):
 
             # Apply Sagnac correction
             #-----------------------------------------------------------------------
-            #SatComPos = applySagnac(SatComPos, FlightTime)
+            SatComPos = applySagnac(SatComPos, FlightTime)
             
-            theta = Const.OMEGA_EARTH*FlightTime
-
             # Compute APO in ECEF from ANTEX APOs in
             # satellite-body reference frame
             #-----------------------------------------------------------------------
-            #Apo = computeSatApo(SatComPos, RcvrPos, SunPos, SatComPos, SatApoInfo)
-
-            #
+            APC, Apo = computeSatApo(SatComPos, RcvrRefPosXyz, SunPos, SatApoInfo, SatLabel)
 
             # Apply APOs to the Satellite Position
-            #SatCopPos = SatComPos + Apo
-
-            #
+            SatCopPos = SatComPos + Apo
 
             # Compute Dtr (Relativistic correction)
             #-----------------------------------------------------------------------
@@ -235,10 +227,61 @@ SatPosInfo, SatClkInfo, SatApoInfo, SatComPos_1, Sod_1):
             # than Conf.ELEV_NOISE_TH=20, and Minimum Signal Level otherwise
             # Apply Conf.SIGMA_AIR_DF factor to both the MP and Noise components
 
+            SigmaAir, Sigma_MP, Sigma_noise_divg = computeSigmaAir(SatCorrInfo["Elevation"], Conf)
 
+            # Compute Sigma UERE by combining all Sigma contributions
+            #-----------------------------------------------------------------------
+            SigmaUERE = computeSigmaUERE(Conf, SigmaTROPO, SigmaAir)
+
+            # Corrected Measurements from previous information
+            #-----------------------------------------------------------------------
+            CorrCode = SatPrepro["IF_C"] + clkBias - STD
+            CorrPhase = SatPrepro["IF_L"] + clkBias - STD
+            
+            # Compute the Geometrical Range
+            #-----------------------------------------------------------------------
+            GeomRange = 0.0
+
+            # Compute the first Residual removing the geometrical range
+            # They include Receiver Clock estimation
+            #-----------------------------------------------------------------------
+            CodeResidual = CorrCode - GeomRange
+            PhaseResidual = CorrPhase - GeomRange
+        
+
+
+
+
+
+
+            #-----------------------------------
+            # Prepare output
+            #-----------------------------------
+            SatCorrInfo["SatX"]
+            SatCorrInfo["SatY"]
+            SatCorrInfo["SatZ"]
+            SatCorrInfo["ApoX"] 
+            SatCorrInfo["ApoY"] 
+            SatCorrInfo["ApoZ"] 
+            SatCorrInfo["SatClk"] 
+            SatCorrInfo["FlightTime"] = FlightTime
+            SatCorrInfo["Std"] = STD
+            SatCorrInfo["CorrCode"] 
+            SatCorrInfo["CorrPhase"] 
+            SatCorrInfo["GeomRange"]
+            SatCorrInfo["CodeResidual"] 
+            SatCorrInfo["PhaseResidual"]
+            SatCorrInfo["RcvrClk"]
+            SatCorrInfo["SigmaTropo"] = SigmaTROPO
+            SatCorrInfo["SigmaAirborne"] = SigmaAir
+            SatCorrInfo["SigmaNoiseDiv"] = Sigma_noise_divg
+            SatCorrInfo["SigmaMultipath"] = Sigma_MP
+            SatCorrInfo["SigmaUere"] = SigmaUERE
+            SatCorrInfo["TropoMpp"] = TropoMpp
+            #-----------------------------------
 
         else:
-            SatCorrInfo["Flag"] == 0
+            SatCorrInfo["Flag"] = 0
 
         # prepare output
         CorrInfo[SatLabel] = SatCorrInfo
@@ -309,16 +352,16 @@ def computeSatComPos(TransmissionTime, SatPosInfo, SatLabel):
         sod_inter = [0.0] * n
 
         # Fill the list of points to interpolate
-        if tt < 3600:
+        if tt < Const.S_IN_H:
             for i in range(n):
                 sod_inter[i] = SodList[i]
-        elif tt > 82800:
+        elif tt > (Const.S_IN_D-Const.S_IN_H):
             for i in range(n):
                 sod_inter[-i-1] = SodList[-i-1]
         else:
             # Obtain positions of near points 
-            pos4 = bisect_left(SodList, tt)
             pos5 = bisect_right(SodList, tt)
+            pos4 = pos5 - 1
             # Add to the array the nearest 10 points
             for i in range((n/2)-1):
                 sod_inter[(n/2)+i] = SodList[pos5 + i]
@@ -348,13 +391,64 @@ def computeSatComPos(TransmissionTime, SatPosInfo, SatLabel):
 def computeFlightTime(SatComPos, RcvrRefPosXyz):
 
     # Calculate distance
-    distance = np.sqrt((SatComPos[0] - RcvrRefPosXyz[0])**2 + \
-                       (SatComPos[1] - RcvrRefPosXyz[1])**2 + \
-                       (SatComPos[2] - RcvrRefPosXyz[2])**2)
+    # Coordinates in meters
+    distance = np.sqrt((SatComPos[0]*Const.M_IN_KM - RcvrRefPosXyz[0])**2 + \
+                       (SatComPos[1]*Const.M_IN_KM - RcvrRefPosXyz[1])**2 + \
+                       (SatComPos[2]*Const.M_IN_KM - RcvrRefPosXyz[2])**2)
    
-    FlightTime = distance / Const.SPEED_OF_LIGHT
+    # FlightTime in ms
+    FlightTime = (distance / Const.SPEED_OF_LIGHT)*Const.MS_IN_S
 
     return FlightTime
+
+# Apply Sagnac Corrections to the satellite
+def applySagnac(SatComPos, FlightTime):
+    # Angle that satellite should rotate
+    theta = Const.OMEGA_EARTH*FlightTime
+
+    RotationMatrix = [
+    [np.cos(theta), np.sin(theta), 0],
+    [-np.sin(theta), np.cos(theta), 0],
+    [0, 0, 1]
+    ]
+
+    RotatedSatPos = np.dot(np.array(RotationMatrix), np.array(SatComPos))
+
+    return RotatedSatPos
+
+# Compute APO in ECEF from ANTEX APOs in satellite-body reference frame
+def computeSatApo(SatComPos, RcvrRefPosXyz, SunPos, SatApoInfo, SatLabel):
+    # Get Components of SatLabel to access InfoFiles
+    Constel = SatLabel[0]
+    Prn = int(SatLabel[1:])
+    FreqL1 = "L1"
+    FreqL2 = "L2"
+    ApoInfoL1 = SatApoInfo[Constel][Prn][FreqL1]/1000
+    ApoInfoL2 = SatApoInfo[Constel][Prn][FreqL2]/1000
+
+    SatComPosMeters = np.array(SatComPos)*1000
+
+    e = (np.array(SunPos) - SatComPosMeters) / np.linalg.norm(np.array(SunPos) - SatComPosMeters)
+    k = -(SatComPosMeters / np.linalg.norm(SatComPosMeters))
+
+    j = np.cross(k, e)
+    i = np.cross(j, k)
+
+    j_uni_test = np.linalg.norm(j)
+    i_uni_test = np.linalg.norm(i)
+    k_uni_test = np.linalg.norm(k)
+
+    R = [[i],
+         [j],
+         [k]]
+    
+    ApoInfo = (ApoInfoL1+ApoInfoL2)/2
+
+    Apo = np.dot(R, ApoInfo)
+    APC =  SatComPosMeters + Apo
+
+    return APC, Apo
+
 
 # Compute Tropospheric Mapping Function
 def computeTropoMpp(elev_deg):
@@ -371,7 +465,7 @@ def computeSlantTropoDelay(TropoMpp, Rcvr, Doy):
     # Average
     #---------------------
     # Pressure [mbar]
-    P_0 = [1013.25, 1017.25, 1011.75, 1011.75, 1013.00]
+    P_0 = [1013.25, 1017.25, 1015.75, 1011.75, 1013.00]
     # Temperature [K]
     T_0 = [299.65, 294.15, 283.15, 272.15, 263.65]
     # Water vapor pressure [mbar]
@@ -393,9 +487,10 @@ def computeSlantTropoDelay(TropoMpp, Rcvr, Doy):
     #---------------------
     latitudes = [15.00, 30.00, 45.00, 60.00, 75.00]
 
-    # Latitude and longitud of Receiver
+    # Latitude, Longitud and Altitude of Receiver
     LatRx = Rcvr[RcvrIdx["LAT"]]
     LonRx = Rcvr[RcvrIdx["LON"]]
+    AltRx = Rcvr[RcvrIdx["ALT"]]
 
     # No need to interpolation if lat < 15º
     if LatRx <= latitudes[0]:
@@ -427,17 +522,36 @@ def computeSlantTropoDelay(TropoMpp, Rcvr, Doy):
 
     # Linear interpolation between values for the two closest latitudes
     else:
-        P_interp = lagrangeInterpolation(latitudes, P_0, LatRx, 2)
-        T_interp = lagrangeInterpolation(latitudes, T_0, LatRx, 2)
-        e_interp = lagrangeInterpolation(latitudes, e_0, LatRx, 2)
-        B_interp = lagrangeInterpolation(latitudes, Beta_0, LatRx, 2)
-        L_interp = lagrangeInterpolation(latitudes, Lambda_0, LatRx, 2)
+        
+        n = 2
+        # Obtain the position of near points
+        x2 = bisect_right(latitudes, LatRx)
+        x1 = x2 - 1
+        x = [latitudes[x1], latitudes[x2]]    
+        # Obtain the parameters of near points to interpolate
+        yP = [P_0[x1], P_0[x2]]
+        yT = [T_0[x1], T_0[x2]]
+        ye = [e_0[x1], e_0[x2]]
+        yB = [Beta_0[x1], Beta_0[x2]]
+        yL = [Lambda_0[x1], Lambda_0[x2]]
 
-        delta_P_interp = lagrangeInterpolation(latitudes, delta_P_0, LatRx, 2)
-        delta_T_interp = lagrangeInterpolation(latitudes, delta_T_0, LatRx, 2)
-        delta_e_interp = lagrangeInterpolation(latitudes, delta_e_0, LatRx, 2)
-        delta_B_interp = lagrangeInterpolation(latitudes, delta_B_0, LatRx, 2)
-        delta_L_interp = lagrangeInterpolation(latitudes, delta_L_0, LatRx, 2)
+        ydP = [delta_P_0[x1], delta_P_0[x2]]
+        ydT = [delta_T_0[x1], delta_T_0[x2]]
+        yde = [delta_e_0[x1], delta_e_0[x2]]
+        ydB = [delta_B_0[x1], delta_B_0[x2]]
+        ydL = [delta_L_0[x1], delta_L_0[x2]]
+
+        P_interp = lagrangeInterpolation(x, yP, LatRx, n)
+        T_interp = lagrangeInterpolation(x, yT, LatRx, n)
+        e_interp = lagrangeInterpolation(x, ye, LatRx, n)
+        B_interp = lagrangeInterpolation(x, yB, LatRx, n)
+        L_interp = lagrangeInterpolation(x, yL, LatRx, n)
+
+        delta_P_interp = lagrangeInterpolation(x, ydP, LatRx, n)
+        delta_T_interp = lagrangeInterpolation(x, ydT, LatRx, n)
+        delta_e_interp = lagrangeInterpolation(x, yde, LatRx, n)
+        delta_B_interp = lagrangeInterpolation(x, ydB, LatRx, n)
+        delta_L_interp = lagrangeInterpolation(x, ydL, LatRx, n)
 
     # Value of the 5 parameters  depended on rx Latitude and day of year (Doy)
     # Const 
@@ -463,8 +577,8 @@ def computeSlantTropoDelay(TropoMpp, Rcvr, Doy):
     # [m/s^2]
     gm = 9.784
 
-    z_hyd = (10e-6*k1*Rd*P) / gm
-    z_wet = ((10e-6*k2*Rd) / (gm*(L+1)-B*Rd))*(e/T)
+    z_hyd = ((10**-6)*k1*Rd*P) / gm
+    z_wet = (((10**-6)*k2*Rd) / (gm*(L+1)-B*Rd))*(e/T)
 
     # [d_hyd and d_wet] estimated range delays for a satellite 
     # at 90º elevation angle (gases and water vapor)
@@ -475,17 +589,57 @@ def computeSlantTropoDelay(TropoMpp, Rcvr, Doy):
 
     geoidH = computeGeoidHeight(LonRx, LatRx)
     # Receiver's height (H) above mean-sea-level
-    H = geoidH - Rcvr[RcvrIdx["ALT"]]
+    H = AltRx - geoidH 
 
     d_hyd = z_hyd*((1-((B*H)/T))**(g/(Rd*B)))
     d_wet = z_wet*((1-((B*H)/T))**(((g*(L+1))/(Rd*B))-1))
 
     # Tropospheric delay correction TC for satellite
     #--------------------------------------------------------
-    TC = -(d_hyd + d_wet) * TropoMpp
+    TC = (d_hyd + d_wet) * TropoMpp
 
     # return STD
     return TC
 
+# Compute User Airborne Sigma Ref: MOPS-DO-229D Section J.2.4
+def computeSigmaAir(elev_deg, Conf):
+    # k factor SIGMA_AIR_DF
+    k = int(Conf["SIGMA_AIR_DF"])
 
+    # Sigma MultiPath   [meters]    
+    sigma_MP = (0.13+0.53*np.exp(-elev_deg/10))*k
+
+    # Consider minimum or maximum signal level
+    # Minimum signal level
+    if float(Conf["ELEV_NOISE_TH"]) >= elev_deg:  
+        # Airborne Accuracy Designator [A,B]
+        if Conf["AIR_ACC_DESIG"] == 'A':
+            sigma_noise_divg = 0.36*k
+        else:
+            sigma_noise_divg = 0.15*k
+    else:
+        # Maximum signal level
+        if Conf["AIR_ACC_DESIG"] == 'A':
+            sigma_noise_divg = 0.15*k
+        else:
+            sigma_noise_divg = 0.11*k
+
+    # Depended on Equipment Class [1,2,3,4]
+    if int(Conf["EQUIPMENT_CLASS"]) == 1:
+        sigmaAir = 5 # [m^2]
+    else:
+        sigmaAir = np.sqrt(sigma_MP**2 + sigma_noise_divg**2)
+    
+    # return sigma Air
+    return sigmaAir, sigma_MP, sigma_noise_divg
+
+# Compute Sigma UERE by combining all Sigma contributions
+def computeSigmaUERE(Conf, SigmaTROPO, SigmaAir):
+    ##----------- sp3 (cm) | clk (ns) | tropo (m) | air (m^2) -------------##
+    SigmaSP3 = Conf["SP3_ACC"]/100
+    SigmaCLK = (Conf["CLK_ACC"]/1e9)*Const.SPEED_OF_LIGHT
+    
+    Sigma_UERE = np.sqrt(SigmaSP3**2 + SigmaCLK**2 + SigmaTROPO**2 + SigmaAir**2)
+
+    return Sigma_UERE
 

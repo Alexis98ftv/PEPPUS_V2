@@ -90,10 +90,13 @@ IONO_HEIGHT=350000.0
 # TIME CONSTANTS
 #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
+# MiliSeconds in one Second
+MS_IN_S = 1000
+
 # Seconds in one hour
 S_IN_H = 3600.0
 
-# Seconds in one hour
+# Seconds in one day
 S_IN_D = 86400
 
 # Days in one week
@@ -101,6 +104,13 @@ D_IN_W = 7
 
 # Julian date for GPS start epoch (1980 January 6)
 JD_0 = 2444244.5
+
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+# DISTANCE CONSTANTS
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+# Meters in one Kilometer
+M_IN_KM = 1000
 
 #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 # IONO CONSTANTS
