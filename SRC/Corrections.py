@@ -193,95 +193,118 @@ SatPosInfo, SatClkInfo, SatApoInfo, SatComPos_1, Sod_1):
             # Compute APO in ECEF from ANTEX APOs in
             # satellite-body reference frame
             #-----------------------------------------------------------------------
-            APC, Apo = computeSatApo(SatComPos, RcvrRefPosXyz, SunPos, SatApoInfo, SatLabel)
+            APC, Apo = computeSatApo(SatComPos, SunPos, SatApoInfo, SatLabel)
 
             # Apply APOs to the Satellite Position
             SatCopPos = SatComPos + Apo
 
             # Compute Dtr (Relativistic correction)
             #-----------------------------------------------------------------------
-            #Dtr = computeDtr(SatComPos_1, SatComPos, Sod, Sod_1)
+            Dtr = computeDtr(SatComPos_1, SatComPos, Sod, Sod_1)
 
-            #
+            # If no prev position and time reject measurement
+            if Dtr == Const.NAN:
+                SatCorrInfo["Flag"] = 0
+                #-----------------------------------
+                # Prepare output
+                #-----------------------------------
+                SatCorrInfo["SatX"] = SatCopPos[0]
+                SatCorrInfo["SatY"] = SatCopPos[1]
+                SatCorrInfo["SatZ"] = SatCopPos[2]
+                SatCorrInfo["ApoX"] = Apo[0]
+                SatCorrInfo["ApoY"] = Apo[1]
+                SatCorrInfo["ApoZ"] = Apo[2]
+                SatCorrInfo["SatClk"] = clkBias
+                SatCorrInfo["FlightTime"] = FlightTime
+                SatCorrInfo["Dtr"] = Dtr
+                #-----------------------------------
+                # Store values for next epoch
+                #-----------------------------------
+                SatComPos_1 = SatComPos
+                Sod_1 = SatCorrInfo["Sod"]
+            # else: Continue
+            else: 
 
-            # Apply Dtr to Clock Bias
-            #SatClkBias = SatClkBias + Dtr
+                # Apply Dtr to Clock Bias
+                SatClkBias = clkBias #+ np.float(Dtr)
 
-            #
+                # Compute the STD: Slant Tropo Delay and associated SigmaTROPO
+                # Refer to MOPS guidelines in Appendix A section A.4.2.4
+                #-----------------------------------------------------------------------
+                # Compute Tropospheric Mapping Function
+                TropoMpp = computeTropoMpp(SatCorrInfo["Elevation"])
 
-            # Compute the STD: Slant Tropo Delay and associated SigmaTROPO
-            # Refer to MOPS guidelines in Appendix A section A.4.2.4
-            #-----------------------------------------------------------------------
-            # Compute Tropospheric Mapping Function
-            TropoMpp = computeTropoMpp(SatCorrInfo["Elevation"])
+                # Compute the Slant Tropospheric Delay Error Sigma (Tropospheric Vertical Error = 0.12 meters)
+                SigmaTROPO = 0.12 * TropoMpp
 
-            # Compute the Slant Tropospheric Delay Error Sigma (Tropospheric Vertical Error = 0.12 meters)
-            SigmaTROPO = 0.12 * TropoMpp
+                # Compute the Slant Tropospheric Delay
+                STD = computeSlantTropoDelay(TropoMpp, Rcvr, Doy)
 
-            # Compute the Slant Tropospheric Delay
-            STD = computeSlantTropoDelay(TropoMpp, Rcvr, Doy)
+                # Compute User Airborne Sigma. Ref: MOPS-DO-229D Section J.2.4
+                #-----------------------------------------------------------------------
+                # Consider Maximum Signal Level when satellite elevation is greater
+                # than Conf.ELEV_NOISE_TH=20, and Minimum Signal Level otherwise
+                # Apply Conf.SIGMA_AIR_DF factor to both the MP and Noise components
 
-            # Compute User Airborne Sigma. Ref: MOPS-DO-229D Section J.2.4
-            #-----------------------------------------------------------------------
-            # Consider Maximum Signal Level when satellite elevation is greater
-            # than Conf.ELEV_NOISE_TH=20, and Minimum Signal Level otherwise
-            # Apply Conf.SIGMA_AIR_DF factor to both the MP and Noise components
+                SigmaAir, Sigma_MP, Sigma_noise_divg = computeSigmaAir(SatCorrInfo["Elevation"], Conf)
 
-            SigmaAir, Sigma_MP, Sigma_noise_divg = computeSigmaAir(SatCorrInfo["Elevation"], Conf)
+                # Compute Sigma UERE by combining all Sigma contributions
+                #-----------------------------------------------------------------------
+                SigmaUERE = computeSigmaUERE(Conf, SigmaTROPO, SigmaAir)
 
-            # Compute Sigma UERE by combining all Sigma contributions
-            #-----------------------------------------------------------------------
-            SigmaUERE = computeSigmaUERE(Conf, SigmaTROPO, SigmaAir)
+                # Corrected Measurements from previous information
+                #-----------------------------------------------------------------------
+                CorrCode = SatPrepro["IF_C"] + SatClkBias - STD
+                CorrPhase = SatPrepro["IF_L"] + SatClkBias - STD
+                
+                # Compute the Geometrical Range
+                #-----------------------------------------------------------------------
+                GeomRange = computeGeomRange(SatCopPos, RcvrRefPosXyz)
 
-            # Corrected Measurements from previous information
-            #-----------------------------------------------------------------------
-            CorrCode = SatPrepro["IF_C"] + clkBias - STD
-            CorrPhase = SatPrepro["IF_L"] + clkBias - STD
-            
-            # Compute the Geometrical Range
-            #-----------------------------------------------------------------------
-            GeomRange = 0.0
-
-            # Compute the first Residual removing the geometrical range
-            # They include Receiver Clock estimation
-            #-----------------------------------------------------------------------
-            CodeResidual = CorrCode - GeomRange
-            PhaseResidual = CorrPhase - GeomRange
+                # Compute the first Residual removing the geometrical range
+                # They include Receiver Clock estimation
+                #-----------------------------------------------------------------------
+                CodeResidual = CorrCode - GeomRange
+                PhaseResidual = CorrPhase - GeomRange
         
 
 
 
-
-
-
-            #-----------------------------------
-            # Prepare output
-            #-----------------------------------
-            SatCorrInfo["SatX"]
-            SatCorrInfo["SatY"]
-            SatCorrInfo["SatZ"]
-            SatCorrInfo["ApoX"] 
-            SatCorrInfo["ApoY"] 
-            SatCorrInfo["ApoZ"] 
-            SatCorrInfo["SatClk"] 
-            SatCorrInfo["FlightTime"] = FlightTime
-            SatCorrInfo["Std"] = STD
-            SatCorrInfo["CorrCode"] 
-            SatCorrInfo["CorrPhase"] 
-            SatCorrInfo["GeomRange"]
-            SatCorrInfo["CodeResidual"] 
-            SatCorrInfo["PhaseResidual"]
-            SatCorrInfo["RcvrClk"]
-            SatCorrInfo["SigmaTropo"] = SigmaTROPO
-            SatCorrInfo["SigmaAirborne"] = SigmaAir
-            SatCorrInfo["SigmaNoiseDiv"] = Sigma_noise_divg
-            SatCorrInfo["SigmaMultipath"] = Sigma_MP
-            SatCorrInfo["SigmaUere"] = SigmaUERE
-            SatCorrInfo["TropoMpp"] = TropoMpp
-            #-----------------------------------
-
+                #-----------------------------------
+                # Prepare output
+                #-----------------------------------
+                SatCorrInfo["SatX"] = SatCopPos[0]
+                SatCorrInfo["SatY"] = SatCopPos[1]
+                SatCorrInfo["SatZ"] = SatCopPos[2]
+                SatCorrInfo["ApoX"] = Apo[0]
+                SatCorrInfo["ApoY"] = Apo[1]
+                SatCorrInfo["ApoZ"] = Apo[2]
+                SatCorrInfo["SatClk"] = SatClkBias
+                SatCorrInfo["FlightTime"] = FlightTime
+                SatCorrInfo["Dtr"] = Dtr
+                SatCorrInfo["Std"] = STD
+                SatCorrInfo["CorrCode"] = CorrCode
+                SatCorrInfo["CorrPhase"] = CorrPhase
+                SatCorrInfo["GeomRange"] = GeomRange
+                SatCorrInfo["CodeResidual"] = CodeResidual
+                SatCorrInfo["PhaseResidual"] = PhaseResidual
+                SatCorrInfo["RcvrClk"]
+                SatCorrInfo["SigmaTropo"] = SigmaTROPO
+                SatCorrInfo["SigmaAirborne"] = SigmaAir
+                SatCorrInfo["SigmaNoiseDiv"] = Sigma_noise_divg
+                SatCorrInfo["SigmaMultipath"] = Sigma_MP
+                SatCorrInfo["SigmaUere"] = SigmaUERE
+                SatCorrInfo["TropoMpp"] = TropoMpp
+                #-----------------------------------
+                # Store values for next epoch
+                #-----------------------------------
+                SatComPos_1 = SatComPos
+                Sod_1 = SatCorrInfo["Sod"]
+            
         else:
             SatCorrInfo["Flag"] = 0
+            SatComPos_1 = {}
+            Sod_1 = {}
 
         # prepare output
         CorrInfo[SatLabel] = SatCorrInfo
@@ -404,7 +427,7 @@ def computeFlightTime(SatComPos, RcvrRefPosXyz):
 # Apply Sagnac Corrections to the satellite
 def applySagnac(SatComPos, FlightTime):
     # Angle that satellite should rotate
-    theta = Const.OMEGA_EARTH*FlightTime
+    theta = Const.OMEGA_EARTH*FlightTime/Const.MS_IN_S
 
     RotationMatrix = [
     [np.cos(theta), np.sin(theta), 0],
@@ -412,43 +435,64 @@ def applySagnac(SatComPos, FlightTime):
     [0, 0, 1]
     ]
 
-    RotatedSatPos = np.dot(np.array(RotationMatrix), np.array(SatComPos))
+    RotatedSatPos = np.dot(np.array(RotationMatrix), np.array(SatComPos)*1000)
 
     return RotatedSatPos
 
 # Compute APO in ECEF from ANTEX APOs in satellite-body reference frame
-def computeSatApo(SatComPos, RcvrRefPosXyz, SunPos, SatApoInfo, SatLabel):
+def computeSatApo(SatComPos, SunPos, SatApoInfo, SatLabel):
     # Get Components of SatLabel to access InfoFiles
     Constel = SatLabel[0]
     Prn = int(SatLabel[1:])
     FreqL1 = "L1"
     FreqL2 = "L2"
-    ApoInfoL1 = SatApoInfo[Constel][Prn][FreqL1]/1000
-    ApoInfoL2 = SatApoInfo[Constel][Prn][FreqL2]/1000
+    ApoInfoL1 = SatApoInfo[Constel][Prn][FreqL1]/Const.MM_IN_M
+    ApoInfoL2 = SatApoInfo[Constel][Prn][FreqL2]/Const.MM_IN_M
 
-    SatComPosMeters = np.array(SatComPos)*1000
+    # Ionofree comb of Antenna Phase Offsets of L1 and L2
+    ApoInfoL1L2 = (ApoInfoL2 - Const.GPS_GAMMA_L1L2*ApoInfoL1) / (1-Const.GPS_GAMMA_L1L2)
 
-    e = (np.array(SunPos) - SatComPosMeters) / np.linalg.norm(np.array(SunPos) - SatComPosMeters)
-    k = -(SatComPosMeters / np.linalg.norm(SatComPosMeters))
+    e = (SunPos - SatComPos) / np.linalg.norm(SunPos - SatComPos) #[-0.8965539, 0.04502293, -0.44064048]
+    k = -(SatComPos / np.linalg.norm(SatComPos))
+
+    # Unitary vectors
+    e_mag = np.sqrt(e[0]**2+e[1]**2+e[2]**2)
+    k_mag = np.sqrt(k[0]**2+k[1]**2+k[2]**2)
+    e_u = e*(1/e_mag)
+    k_u = k*(1/k_mag)
 
     j = np.cross(k, e)
     i = np.cross(j, k)
+    # Unitary vectors
+    j_mag = np.sqrt(j[0]**2+j[1]**2+j[2]**2)
+    i_mag = np.sqrt(i[0]**2+i[1]**2+i[2]**2)
+    j_u = j*(1/j_mag)
+    i_u = i*(1/i_mag)
 
-    j_uni_test = np.linalg.norm(j)
-    i_uni_test = np.linalg.norm(i)
-    k_uni_test = np.linalg.norm(k)
-
-    R = [[i],
-         [j],
-         [k]]
+    # debugging:
+    j_uni_test = np.linalg.norm(j_u)
+    i_uni_test = np.linalg.norm(i_u)
+    k_uni_test = np.linalg.norm(e_u)
+    e_uni_test = np.linalg.norm(k_u)
+    #------------------------------------
     
-    ApoInfo = (ApoInfoL1+ApoInfoL2)/2
-
-    Apo = np.dot(R, ApoInfo)
-    APC =  SatComPosMeters + Apo
+    R = [i_u,j_u,k_u]
+    
+    Apo = np.dot(R, ApoInfoL1L2)
+    APC =  SatComPos + Apo
 
     return APC, Apo
 
+# Compute Dtr (Relativistic correction)
+def computeDtr(SatComPos_1, SatComPos, Sod, Sod_1):
+    # Check last values
+    if not Sod_1:
+        Dtr = Const.NAN
+    else:
+        v = (SatComPos-SatComPos_1)/(Sod-Sod_1)
+        Dtr = -2*(np.dot(SatComPos, v)/Const.SPEED_OF_LIGHT)
+    
+    return Dtr
 
 # Compute Tropospheric Mapping Function
 def computeTropoMpp(elev_deg):
@@ -643,3 +687,8 @@ def computeSigmaUERE(Conf, SigmaTROPO, SigmaAir):
 
     return Sigma_UERE
 
+def computeGeomRange(SatCopPos, RcvrRefPosXyz):
+    distance = np.sqrt((SatCopPos[0] - RcvrRefPosXyz[0])**2 + \
+                       (SatCopPos[1] - RcvrRefPosXyz[1])**2 + \
+                       (SatCopPos[2] - RcvrRefPosXyz[2])**2)
+    return distance
