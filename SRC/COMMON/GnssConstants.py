@@ -97,7 +97,7 @@ MS_IN_S = 1000
 S_IN_H = 3600.0
 
 # Seconds in one day
-S_IN_D = 86400
+S_IN_D = 86400.0
 
 # Days in one week
 D_IN_W = 7

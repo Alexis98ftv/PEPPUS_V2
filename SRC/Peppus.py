@@ -46,9 +46,9 @@ from InputOutput import PreproHdr, CorrHdr
 from InputOutput import CSNEPOCHS, CSNPOINTS
 from InputOutput import RcvrIdx, ObsIdx
 from Preprocessing import runPreProcMeas
-# from PreprocessingPlots import generatePreproPlots
+from PreprocessingPlots import generatePreproPlots
 from Corrections import runCorrectMeas
-# from CorrectionsPlots import generateCorrPlots
+from CorrectionsPlots import generateCorrPlots
 from COMMON.Dates import convertJulianDay2YearMonthDay
 from COMMON.Dates import convertYearMonthDay2Doy
 
@@ -256,7 +256,7 @@ for Rcvr in RcvrInfo.keys():
             PreproObsFile)
 
             # Generate Preprocessing plots
-            # generatePreproPlots(PreproObsFile)
+            generatePreproPlots(PreproObsFile)
 
         # If PCOR outputs are requested
         if Conf["PCOR_OUT"] == 1:
@@ -268,7 +268,7 @@ for Rcvr in RcvrInfo.keys():
             CorrFile)
         
             # Generate PCOR plots
-            # generateCorrPlots(CorrFile, RcvrInfo[Rcvr])
+            generateCorrPlots(CorrFile, RcvrInfo[Rcvr])
 
     # End of JD loop
 
