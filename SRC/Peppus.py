@@ -268,7 +268,7 @@ for Rcvr in RcvrInfo.keys():
             CorrFile)
         
             # Generate PCOR plots
-            generateCorrPlots(CorrFile, RcvrInfo[Rcvr])
+            generateCorrPlots(CorrFile)
 
     # End of JD loop
 

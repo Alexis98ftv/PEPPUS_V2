@@ -273,8 +273,51 @@ def generateLinesPlot(PlotConf):
     plt.close('all')
 
 
+
+def generateTablePlot(PlotConf):
+    LineWidth = 1.5
+    Color = "b"
+    Width = 0.8
+    Bottom = 0
+    Align = 'center'
+    fig, ax = createFigure(PlotConf)
+    
+    prepareAxis(PlotConf, ax)
+
+    for key in PlotConf:
+        if key == "LineWidth":
+            LineWidth = PlotConf["LineWidth"]
+        if key == "WidthBar":
+            Width = PlotConf["WidthBar"]
+        if key == "BottomBar":
+            Bottom = PlotConf["BottomBar"]
+        if key == "AlignBar":
+            Align = PlotConf["AlignBar"]
+
+    for Label in PlotConf["yData"].keys():
+        if "Color" in PlotConf and Label in PlotConf["Color"]:
+            ColorData = PlotConf["Color"][Label]
+        else:
+            ColorData = Color
+
+
+    ax.bar(PlotConf["xCoorBar"][Label], 
+           PlotConf["HeightBar"][Label],
+           width = Width,
+           bottom = Bottom,
+           align = Align
+           )
+
+
+    saveFigure(fig, PlotConf["Path"])
+    plt.close('all')
+
+
 def generatePlot(PlotConf):
     if(PlotConf["Type"] == "Lines"):
         generateLinesPlot(PlotConf)
+    elif(PlotConf["Type"] == "Table"):
+        generateTablePlot(PlotConf)
+
 
 #

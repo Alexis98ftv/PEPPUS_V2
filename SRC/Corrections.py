@@ -373,10 +373,7 @@ def computeSatClkBias(Sod, SatClkInfo, SatLabel):
 
     # Care of gaps in SatClkInfo
     gap = False
-
-    if (Sod==2250 and SatLabel=="G18"):
-        print("DEBUGG")
-
+    
     # No need of interpolation if it's in the infoFile
     if Sod in SodList:
         clkBias = SatClkPrn[Sod]
@@ -388,7 +385,7 @@ def computeSatClkBias(Sod, SatClkInfo, SatLabel):
         x2 = SodList[position]
         x = [x1, x2]
         # Take into account the possible gap in SatClkInfo
-        if abs(x1-x2) > 300:
+        if ((abs(x1-Sod) > 300) or (abs(Sod-x2) > 300)):
             gap = True
             clkBias = Const.NAN
             return clkBias, gap

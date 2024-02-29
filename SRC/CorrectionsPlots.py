@@ -59,6 +59,7 @@ cfg = {
     "SNoiDiv"           : 1,
     "SAirb"             : 1,
     "SUERE"             : 1,
+    "UERE_statistics"   : 0,
     "RCVR"              : 1,
     "C-RES"             : 1,
     "PH-RES"            : 1,
@@ -270,7 +271,9 @@ def plotSTD_Elev(CorrFile, CorrData):
 
     PlotConf["ColorBar"] = "gnuplot"
     PlotConf["ColorBarLabel"] = "PRN"
-    PlotConf["ColorBarTicks"] = range(0,33)
+    PlotConf["ColorBarMin"] = min(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarMax"] = max(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarTicks"] = sorted(unique(CorrData[CorrIdx["PRN"]]))
 
     PlotConf["xData"] = {}
     PlotConf["yData"] = {}
@@ -309,7 +312,9 @@ def plotSTropo_Elev(CorrFile, CorrData):
 
     PlotConf["ColorBar"] = "gnuplot"
     PlotConf["ColorBarLabel"] = "PRN"
-    PlotConf["ColorBarTicks"] = range(0,33)
+    PlotConf["ColorBarMin"] = min(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarMax"] = max(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarTicks"] = sorted(unique(CorrData[CorrIdx["PRN"]]))
 
     PlotConf["xData"] = {}
     PlotConf["yData"] = {}
@@ -348,7 +353,9 @@ def plotSMP_elev(CorrFile, CorrData):
 
     PlotConf["ColorBar"] = "gnuplot"
     PlotConf["ColorBarLabel"] = "PRN"
-    PlotConf["ColorBarTicks"] = range(0,33)
+    PlotConf["ColorBarMin"] = min(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarMax"] = max(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarTicks"] = sorted(unique(CorrData[CorrIdx["PRN"]]))
 
     PlotConf["xData"] = {}
     PlotConf["yData"] = {}
@@ -387,7 +394,9 @@ def plotSNoiDiv_elev(CorrFile, CorrData):
 
     PlotConf["ColorBar"] = "gnuplot"
     PlotConf["ColorBarLabel"] = "PRN"
-    PlotConf["ColorBarTicks"] = range(0,33)
+    PlotConf["ColorBarMin"] = min(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarMax"] = max(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarTicks"] = sorted(unique(CorrData[CorrIdx["PRN"]]))
 
     PlotConf["xData"] = {}
     PlotConf["yData"] = {}
@@ -426,7 +435,9 @@ def plotSAirb_elev(CorrFile, CorrData):
 
     PlotConf["ColorBar"] = "gnuplot"
     PlotConf["ColorBarLabel"] = "PRN"
-    PlotConf["ColorBarTicks"] = range(0,33)
+    PlotConf["ColorBarMin"] = min(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarMax"] = max(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarTicks"] = sorted(unique(CorrData[CorrIdx["PRN"]]))
 
     PlotConf["xData"] = {}
     PlotConf["yData"] = {}
@@ -465,7 +476,9 @@ def plotSUERE_elev(CorrFile, CorrData):
 
     PlotConf["ColorBar"] = "gnuplot"
     PlotConf["ColorBarLabel"] = "PRN"
-    PlotConf["ColorBarTicks"] = range(0,33)
+    PlotConf["ColorBarMin"] = min(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarMax"] = max(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarTicks"] = sorted(unique(CorrData[CorrIdx["PRN"]]))
 
     PlotConf["xData"] = {}
     PlotConf["yData"] = {}
@@ -481,6 +494,42 @@ def plotSUERE_elev(CorrFile, CorrData):
 
     # init plot
     Folder = "SigmaUEREvsELEV"
+    initPlot(CorrFile, PlotConf, Title, Folder)
+    # Call generatePlot from Plots library
+    generatePlot(PlotConf)
+
+def plotUERE_Statistics(CorrFile, CorrData):
+    PlotConf = {}
+
+    PlotConf["Type"] = "Table"
+    PlotConf["FigSize"] = (8.4,6.6)
+    Title = "Sigma UERE"
+
+    PlotConf["yLabel"] = "Sigma UERE [m]"
+
+    PlotConf["Grid"] = 1
+
+    #PlotConf["Marker"] = '|'
+    PlotConf["LineWidth"] = 1.5
+
+    PlotConf["xData"] = {}
+    PlotConf["yData"] = {}
+    PlotConf["zData"] = {}
+
+    Label = 0
+
+    filter_flag = CorrData[CorrIdx["FLAG"]] == 1
+    UEREmax = max(CorrData[CorrIdx["SUERE"]][filter_flag])
+
+    PlotConf["xCoorBar"][Label] = 5.0
+    PlotConf["HeightBar"][Label] = UEREmax
+
+    #PlotConf["xData"][Label] = CorrData[CorrIdx["ELEV"]][filter_flag]
+    PlotConf["yData"][Label] = UEREmax
+    #PlotConf["zData"][Label] = CorrData[CorrIdx["PRN"]][filter_flag]
+
+    # init plot
+    Folder = "SigmaUERE_STATS"
     initPlot(CorrFile, PlotConf, Title, Folder)
     # Call generatePlot from Plots library
     generatePlot(PlotConf)
@@ -537,7 +586,9 @@ def plotCodeResiduals(CorrFile, CorrData):
 
     PlotConf["ColorBar"] = "gnuplot"
     PlotConf["ColorBarLabel"] = "PRN"
-    PlotConf["ColorBarTicks"] = range(0,33)
+    PlotConf["ColorBarMin"] = min(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarMax"] = max(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarTicks"] = sorted(unique(CorrData[CorrIdx["PRN"]]))
 
     PlotConf["xData"] = {}
     PlotConf["yData"] = {}
@@ -576,7 +627,9 @@ def plotPhaseResiduals(CorrFile, CorrData):
 
     PlotConf["ColorBar"] = "gnuplot"
     PlotConf["ColorBarLabel"] = "PRN"
-    PlotConf["ColorBarTicks"] = range(0,33)
+    PlotConf["ColorBarMin"] = min(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarMax"] = max(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarTicks"] = sorted(unique(CorrData[CorrIdx["PRN"]]))
 
     PlotConf["xData"] = {}
     PlotConf["yData"] = {}
@@ -616,7 +669,10 @@ def plotPhaseResidualsZoom(CorrFile, CorrData):
 
     PlotConf["ColorBar"] = "gnuplot"
     PlotConf["ColorBarLabel"] = "PRN"
-    PlotConf["ColorBarTicks"] = range(0,33)
+    PlotConf["ColorBarMin"] = min(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarMax"] = max(unique(CorrData[CorrIdx["PRN"]]))
+    PlotConf["ColorBarTicks"] = sorted(unique(CorrData[CorrIdx["PRN"]]))
+
 
     PlotConf["xData"] = {}
     PlotConf["yData"] = {}
@@ -638,7 +694,7 @@ def plotPhaseResidualsZoom(CorrFile, CorrData):
 
 
 # Generate CorrPlots
-def generateCorrPlots(CorrFile, Rcvr):
+def generateCorrPlots(CorrFile):
     # Purpose: generate output plots regarding Corrections results
 
     # Parameters
@@ -758,11 +814,22 @@ def generateCorrPlots(CorrFile, Rcvr):
         CorrData = read_csv(CorrFile, delim_whitespace=True, skiprows=1, header=None,\
         usecols=[CorrIdx["ELEV"], CorrIdx["SUERE"], CorrIdx["PRN"], CorrIdx["FLAG"]])
 
-        print( '\nPlot Sigma UERE vs Elevation ...')
+        print( '\nPlot Sigma UERE Statistics per Satellite ...')
 
         # Call Plot Function
         plotSUERE_elev(CorrFile, CorrData)
     
+    # Sigma UERE Statistics
+    # ----------------------------------------------------------
+    if (cfg["UERE_statistics"] == 1):
+        CorrData = read_csv(CorrFile, delim_whitespace=True, skiprows=1, header=None,\
+        usecols=[CorrIdx["CONST"], CorrIdx["PRN"], CorrIdx["SUERE"], CorrIdx["FLAG"]])
+
+        print( '\nPlot Sigma UERE vs Elevation ...')
+
+        # Call Plot Function
+        plotUERE_Statistics(CorrFile, CorrData)
+
     # Receiver Clock Estimation
     # ----------------------------------------------------------
     if (cfg["RCVR"] == 1):
